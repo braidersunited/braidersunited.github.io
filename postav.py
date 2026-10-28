@@ -22,6 +22,7 @@ import json
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -44,7 +45,7 @@ stiahnute = set()
 def get(url, binarne=False, pokusy=3):
     for i in range(pokusy):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
                 data = r.read()
                 return (data, r.headers.get("Content-Type", "")) if binarne else data.decode("utf-8")
         except Exception as e:
@@ -145,6 +146,7 @@ def main():
         for odk in re.findall(r'href="([a-z0-9\-]+\.html)(?:#[^"]*)?"', html):
             if odk != "apply.html" and odk not in hotove and len(hotove) + len(fronta) < 80:
                 fronta.append(odk)
+    print(f"stranky: {len(hotove)}", flush=True)
     for n, html in hotove.items():
         if html is not None:
             uloz(f"ru/{n}", stranka(n, html))
@@ -175,9 +177,12 @@ def main():
         if not j.get("ok"):
             raise RuntimeError(f"/api/karty?d={i} neodpoveda ok")
         zive += j["karty"]
+    with ThreadPoolExecutor(8) as ex:   # fotky naraz, nie po jednej
+        list(ex.map(foto, sorted({b["img"] for b in zive if str(b.get("img") or "").startswith("http")})))
     for b in zive:
         if str(b.get("img") or "").startswith("http"):
             b["img"] = "../" + foto(b["img"])
+    print(f"zive karticky: {len(zive)}, fotky: {len(nova_cesta)}", flush=True)
     zive = [{k: v for k, v in b.items() if k in POLIA} for b in zive]
     casti = max(1, -(-len(zive) // DAVKA))
     for i in range(casti):
@@ -228,13 +233,14 @@ def main():
         if p.suffix in (".html", ".js", ".json", ".css"):
             potrebne |= odkazy_na_zdroje(p.read_text(encoding="utf-8"))
     potrebne |= {f"assets/{s}" for s in ("t_ru.js", "ui.js", "icons.js", "site.css")}
-    for rel in sorted(potrebne):
-        if rel.startswith("img/k/"):
-            continue
+    def skus(rel):
         try:
             zdroj(rel)
         except RuntimeError as e:   # odkaz najdeny v skripte nemusi byt subor; povinne su len odkazy zo stranok (krok 7)
-            print("preskakujem", e)
+            print("preskakujem", e, flush=True)
+    with ThreadPoolExecutor(8) as ex:
+        list(ex.map(skus, sorted(potrebne)))
+    print(f"subory: {len(stiahnute)}", flush=True)
     # druhe kolo: odkazy v prave stiahnutych skriptoch (napr. t_ru.js, ui.js)
     for rel in list(stiahnute):
         if rel.endswith(".js"):
