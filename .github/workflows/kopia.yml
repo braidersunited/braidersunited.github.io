@@ -1,0 +1,45 @@
+# Ruska kopia mapy Braiders United (Dream braids s.r.o.), Dean 28.10.2026.
+# Kazdu hodinu stiahne verejnu /ru z braidersunited.com a nasadi ju ako Pages artefakt.
+# Karticky NIKDY nejdu do repozitara (Tibor 27.10.2026), len do artefaktu s retention-days: 1.
+name: kopia
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Postav kopiu
+        run: python3 -I postav.py _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+          retention-days: 1
+      # keepalive: GitHub vypina planovane workflowy po 60 dnoch bez aktivity; enable cez API pocitadlo nuluje
+      - name: Keepalive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/kopia.yml/enable" || echo "keepalive zlyhal"
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
