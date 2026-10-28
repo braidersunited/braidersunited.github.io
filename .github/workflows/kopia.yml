@@ -30,7 +30,6 @@ jobs:
           retention-days: 1
       # keepalive: GitHub vypina planovane workflowy po 60 dnoch bez aktivity; enable cez API pocitadlo nuluje
       - name: Keepalive
-        if: github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/kopia.yml/enable" || echo "keepalive zlyhal"
