@@ -30,7 +30,9 @@ from pathlib import Path
 ZDROJ = "https://braidersunited.com"
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "_site")
 # Erik 28.10.2026: kam vedu tlacidla prihlasky a ci sa kopia indexuje (doplnene podla jeho hlasenia)
-PRIHLASKA = "https://oobraider.ru/anketa_karta_br"   # GetCourse ruskej skoly, v Rusku sa otvori
+# Michal 29.10.2026: prihlaska je priamo na mape (apply.html z originalu), posiela do nasho Workera;
+# GetCourse (oobraider.ru/anketa_karta_br) je len zaloha, keby Worker z Ruska nebol dosiahnutelny
+WORKER = "https://oobraider-optin.olgaolikovabraider.workers.dev"
 NOINDEX = True   # Erik: noindex bez canonical a hreflang, v indexe ostava len braidersunited.com/ru/
 # whitelist poli verejnej karticky (Tibor 27.10.2026); html/net/alt/noflag su len vykreslenie tych istych poli
 POLIA = {"n", "city", "country", "addr", "lat", "lon", "net", "net_key", "handle", "shown", "url",
@@ -114,7 +116,6 @@ def stranka(nazov, html):
     html = re.sub(r'href="/cdn-cgi/l/email-protection"', 'href="#"', html)
     # jazyky mimo kopie idu na braidersunited.com; /ru/ ostava v kopii
     html = re.sub(r'href="/(sk/|de/)?"', lambda m: f'href="{ZDROJ}/{m.group(1) or ""}"', html)
-    html = re.sub(r'href="apply\.html[^"]*"', f'href="{PRIHLASKA}"', html)
     if NOINDEX:
         html = re.sub(r'<meta name="robots"[^>]*>\s*', "", html)
         html = re.sub(r'<link rel="(?:canonical|alternate)"[^>]*>\s*', "", html)
@@ -128,7 +129,7 @@ def main():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True)
 
-    # 1) stranky /ru: od titulky po vsetky dosiahnutelne /ru/*.html okrem prihlasky
+    # 1) stranky /ru: od titulky po vsetky dosiahnutelne /ru/*.html vratane prihlasky
     fronta, hotove = ["index.html"], {}
     while fronta:
         n = fronta.pop(0)
@@ -144,7 +145,7 @@ def main():
             continue
         hotove[n] = html
         for odk in re.findall(r'href="([a-z0-9\-]+\.html)(?:#[^"]*)?"', html):
-            if odk != "apply.html" and odk not in hotove and len(hotove) + len(fronta) < 80:
+            if odk not in hotove and len(hotove) + len(fronta) < 80:
                 fronta.append(odk)
     print(f"stranky: {len(hotove)}", flush=True)
     for n, html in hotove.items():
@@ -212,6 +213,12 @@ def main():
     if n != 1:
         raise RuntimeError("icons.js sa zmenil, nenasiel som BU_API")
     uloz("assets/icons.js", icons)
+    # apply.js: prihlaska posiela do Workera priamo (icons.js uz BU_API nenesie); jediny subor s workers.dev
+    apply = get(f"{ZDROJ}/assets/apply.js")
+    if apply.count("var API = window.BU_API,") != 1:
+        raise RuntimeError("apply.js sa zmenil, nenasiel som var API = window.BU_API")
+    uloz("assets/apply.js", apply.replace("var API = window.BU_API,", f'var API = "{WORKER}",'))
+    stiahnute.add("assets/apply.js")
     stiahnute.add("assets/icons.js")
     stiahnute.add("assets/home.js")
     stiahnute.add("assets/data_ru.js")
@@ -272,6 +279,8 @@ def main():
         if p.suffix in (".html", ".js", ".json", ".css"):
             t = p.read_text(encoding="utf-8")
             for z in ZAKAZANE:
+                if z == "workers.dev" and p.relative_to(OUT).as_posix() == "assets/apply.js" and t.count(z) == 1:
+                    continue   # odoslanie prihlasky, nie nacitanie stranky
                 if z in t:
                     raise RuntimeError(f"{p.relative_to(OUT)} obsahuje {z}")
             if re.search(r"""(src=|url\(|fetch\()\s*["']?https://braidersunited\.com""", t):
