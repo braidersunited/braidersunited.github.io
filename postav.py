@@ -217,7 +217,18 @@ def main():
     apply = get(f"{ZDROJ}/assets/apply.js")
     if apply.count("var API = window.BU_API,") != 1:
         raise RuntimeError("apply.js sa zmenil, nenasiel som var API = window.BU_API")
-    uloz("assets/apply.js", apply.replace("var API = window.BU_API,", f'var API = "{WORKER}",'))
+    apply = apply.replace("var API = window.BU_API,", f'var API = "{WORKER}",')
+    # Dean 2.11.2026 (Michal ano): bez VPN sa Worker z Ruska nedovola (Cloudflare blok), fetch padne do catch -> fail("").
+    # Namiesto vseobecnej chyby ukaz VPN a zalohu GetCourse (Michal 29.10.2026). Text napisal Dean, Michal ano 2.11.2026.
+    stara_chyba = '$("err").textContent = MSG[code] || tt(T.err_generic, { ig: T.ig });'
+    if apply.count(stara_chyba) != 1:
+        raise RuntimeError("apply.js sa zmenil, nenasiel som hlasku err_generic vo fail()")
+    nova_chyba = ('if (code === "") $("err").innerHTML = ' + json.dumps(
+        'Не удалось связаться с сервером карты. В России так бывает без VPN. '
+        'Включите VPN и нажмите кнопку ещё раз или заполните '
+        '<a href="https://oobraider.ru/anketa_karta_br" target="_blank" rel="noopener">эту анкету</a>, '
+        'и мы сами добавим вашу карточку.', ensure_ascii=False) + '; else ' + stara_chyba)
+    uloz("assets/apply.js", apply.replace(stara_chyba, nova_chyba))
     stiahnute.add("assets/apply.js")
     stiahnute.add("assets/icons.js")
     stiahnute.add("assets/home.js")
