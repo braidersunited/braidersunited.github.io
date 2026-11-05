@@ -169,12 +169,12 @@ def main():
     uloz("assets/data_ru.js", "window.BRAIDERS=" + json.dumps(staticke, ensure_ascii=False) + ";")
 
     # 3) zive karticky z /api/karty po davkach + ich fotky z Workera do img/k/
-    prva = json.loads(get(f"{ZDROJ}/api/karty?d=0"))
+    prva = json.loads(get(f"{ZDROJ}/api/karty?d=0&lang=ru"))
     if not prva.get("ok"):
         raise RuntimeError("/api/karty neodpoveda ok")
     zive = list(prva["karty"])
     for i in range(1, prva["casti"]):
-        j = json.loads(get(f"{ZDROJ}/api/karty?d={i}"))
+        j = json.loads(get(f"{ZDROJ}/api/karty?d={i}&lang=ru"))
         if not j.get("ok"):
             raise RuntimeError(f"/api/karty?d={i} neodpoveda ok")
         zive += j["karty"]
@@ -200,8 +200,9 @@ def main():
     # 4) skripty: home.js berie dávky z kopie, Worker sa nevola
     home = get(f"{ZDROJ}/assets/home.js")
     for stare, nove in [
-        ('fetch("/api/karty?d=" + i)', 'fetch(T.root + "assets/karty_" + i + ".json")'),
-        ('return fetch(window.BU_API + "/bu/karty").then(function (r) { return r.json(); });', 'return Promise.reject(new Error("kopia"));'),
+        # 5.11.2026: home.js posiela jazyk (&lang=), kopia je len /ru, karticky su stiahnute s lang=ru
+        ('fetch("/api/karty?d=" + i + "&lang=" + T.lang)', 'fetch(T.root + "assets/karty_" + i + ".json")'),
+        ('return fetch(window.BU_API + "/bu/karty?lang=" + T.lang).then(function (r) { return r.json(); });', 'return Promise.reject(new Error("kopia"));'),
     ]:
         if home.count(stare) != 1:
             raise RuntimeError(f"home.js sa zmenil, nenasiel som: {stare}")
